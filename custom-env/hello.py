@@ -1,14 +1,14 @@
 import asyncio
-import csv
-import io
-import json
-import os
 import sys
+from os import system
+import json
 
 import numpy as np
 import tritonclient.grpc.aio as grpcclient
 from tritonclient.utils import *
 
+import os
+import requests
 from flask import Flask, request
 
 app = Flask(__name__)
@@ -16,6 +16,8 @@ app = Flask(__name__)
 url_prefix = os.environ.get("URL_PREFIX", "")
 model_name = os.environ.get("MODEL_NAME", "densenet_onnx")
 triton_server_port = os.environ.get("TRITON_PORT", "8000")
+
+default_sys_prompt = "You are a helpful AI assistant. Keep short answers of no more than 2 sentences."
 
 
 @app.route(f"{url_prefix}/")
@@ -28,38 +30,73 @@ def lrs_health():
     return {'message': 'OK'}
 
 
-@app.route(f"{url_prefix}/predict/")
+@app.post(f"{url_prefix}/predict/")
+@app.post(f"{url_prefix}/predictions/")
+@app.post(f"{url_prefix}/invocations/")
 def predict():
-    return {'message': 'OK'}
+    app.logger.error("Headers: %s", request.headers)
+    
+    # read request data
+    filestorage = request.files.get("X")  # prediction server / drum magic
+    reader = csv.DictReader(io.TextIOWrapper(filestorage))
+    index = 0
+    user_prompt = ""
+    system_prompt = default_sys_prompt
+    
+    for row in reader:
+        user_prompt = row["promptText"]
+        system_prompt = row.get("system", default_sys_prompt)
+        break
+    
+    # do predictions
+    model_response = do_predict(user_prompt, system_prompt)
+    response = format_textgen_response(model_response, index)
+    return response, 200
 
 
 @app.post(f"{url_prefix}/predictUnstructured/")
 def predict_unstructured():
-    # proxy request to Triton server
     request_json = request.json
     user_prompt = request_json["prompt"]
-    system_prompt = request_json.get("system", "You are a helpful AI assistant. Keep short answers of no more than 2 sentences.")
+    system_prompt = request_json.get("system", default_sys_prompt)
+
+    model_response = do_predict(user_prompt, system_prompt)
+    return model_response.decode('utf-8'), 200
+
+
+def do_predict(user_prompt, system_prompt):
+    # proxy request to Triton server
     result = asyncio.run(main(user_prompt, system_prompt))
     model_response_bytes = result['0'][0]
-    return model_response_bytes.decode('utf-8') + "\n\n", 200
+    return model_response_bytes
 
 
-@app.post(f"{url_prefix}/predict/")
-def predict_text_gen():
-    app.logger.error("Headers: %s", request.headers)
-    filestorage = request.files.get("X")  # prediction server / drum magic
-    reader = csv.DictReader(io.TextIOWrapper(filestorage))
-    for row in reader:
-        user_prompt = row["promptText"]
-        system_prompt = row.get("system", "You are a helpful AI assistant. Keep short answers of no more than 2 sentences.")
-        break
-    result = asyncio.run(main(user_prompt, system_prompt))
-    raw_model_response = result['0'][0].decode('utf-8')
-    # Delete model instructions
+def _remove_model_instructions_from_output(raw_model_response_bytes):
+    raw_model_response = model_response_bytes.decode('utf-8')
     model_instructions_marker = '[/INST]'
     marker_len = len(model_instructions_marker)
-    return {"data": [{"prediction": raw_model_response[raw_model_response.find(model_instructions_marker)+marker_len+1:]}]}, 200
+    start_index = raw_model_response.find(model_instructions_marker) + marker_len + 1
+    return raw_model_response[start_index:]
 
+
+def format_textgen_response(model_response_bytes, index):
+    pred_value = _remove_model_instructions_from_output(model_response_bytes)
+    response = {
+            "data": [
+                {
+                    "prediction": pred_value,
+                    "predictionValues": [
+                        {
+                            "label": "promptText",
+                            "value": pred_value
+                        }
+                    ],
+                    "rowId": index,
+                    "extraModelOutput": None
+                }
+            ]
+        }
+    return response
 
 
 def create_request(prompt, stream, request_id, sampling_parameters, model_name, send_parameters_as_tensor=True):

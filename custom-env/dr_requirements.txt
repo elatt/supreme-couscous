@@ -1,4 +1,3 @@
 flask
+vllm==0.3.0
 tritonclient[grpc]
-datarobot-mlops
-datarobot-drum
