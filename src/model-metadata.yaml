@@ -1,0 +1,13 @@
+name: vLLM HuggingFace Example
+type: inference
+targetType: textgeneration
+
+runtimeParameterDefinitions:
+  - fieldName: model
+    type: string
+    defaultValue: meta-llama/Llama-2-7b-chat-hf
+    description: Choose what model to download and run.
+
+  - fieldName: HuggingFaceToken
+    type: credential
+    description: API Token generated from HuggingFace.
