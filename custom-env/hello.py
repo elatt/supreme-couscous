@@ -12,6 +12,7 @@ from tritonclient.utils import *
 from flask import Flask, request
 
 app = Flask(__name__)
+app.logger.setLevel("INFO")
 
 url_prefix = os.environ.get("URL_PREFIX", "")
 triton_server_port = os.environ.get("TRITON_PORT", "8000")
@@ -40,21 +41,26 @@ def predict_unstructured():
     return model_response_bytes.decode('utf-8') + "\n\n", 200
 
 
-@app.post(f"{url_prefix}/predict/")
-def predict_text_gen():
-    app.logger.error("Headers: %s", request.headers)
-    filestorage = request.files.get("X")  # prediction server / drum magic
-    reader = csv.DictReader(io.TextIOWrapper(filestorage))
-    for row in reader:
-        user_prompt = row["promptText"]
-        system_prompt = row.get("system", default_system_prompt)
-        break
-    result = asyncio.run(main(user_prompt, system_prompt))
-    raw_model_response = result['0'][0].decode('utf-8')
-    # Delete model instructions
+def _delete_instruction(text):
     model_instructions_marker = '[/INST]'
     marker_len = len(model_instructions_marker)
-    return {"data": [{"prediction": raw_model_response[raw_model_response.find(model_instructions_marker)+marker_len+1:]}]}, 200
+    return text[text.find(model_instructions_marker) + marker_len + 1:]
+
+
+@app.post(f"{url_prefix}/predict/")
+def predict_text_gen():
+    app.logger.info("Headers: %s", request.headers)
+    filestorage = request.files.get("X")  # prediction server / drum magic
+    reader = csv.DictReader(io.TextIOWrapper(filestorage))
+    predictions = []
+    for i, row in enumerate(reader):
+        app.logger.info("Row %d: %s", i, row)
+        user_prompt = row["promptText"]
+        system_prompt = row.get("system", default_system_prompt)
+        result = asyncio.run(main(user_prompt, system_prompt))
+        app.logger.info("results: %s", result)
+        predictions.append(_delete_instruction(result['0'][0].decode('utf-8')))
+    return {"predictions": predictions}, 200
 
 
 def create_request(prompt, stream, request_id, sampling_parameters, model_name, send_parameters_as_tensor=True):
@@ -141,4 +147,3 @@ async def main(user_prompt, sys_prompt):
             sys.exit(1)
 
     return results_dict
-
