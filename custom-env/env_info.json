@@ -1,8 +1,0 @@
-{
-  "id": "5e3028d9c38741266ef86555",
-  "name": "[DataRobot] Triton Inference Server 22.04",
-  "description": "This template can be used as an environment for custom models supported by Triton Inference Server",
-  "programmingLanguage": "python",
-  "environmentVersionId": "65b44469c69a2fca40bba555",
-  "isPublic": true
-}
