@@ -1,14 +1,14 @@
 import asyncio
-import sys
-from os import system
+import csv
+import io
 import json
+import os
+import sys
 
 import numpy as np
 import tritonclient.grpc.aio as grpcclient
 from tritonclient.utils import *
 
-import os
-import requests
 from flask import Flask, request
 
 app = Flask(__name__)
@@ -42,6 +42,24 @@ def predict_unstructured():
     result = asyncio.run(main(user_prompt, system_prompt))
     model_response_bytes = result['0'][0]
     return model_response_bytes.decode('utf-8') + "\n\n", 200
+
+
+@app.post(f"{url_prefix}/predict/")
+def predict_text_gen():
+    app.logger.error("Headers: %s", request.headers)
+    filestorage = request.files.get("X")  # prediction server / drum magic
+    reader = csv.DictReader(io.TextIOWrapper(filestorage))
+    for row in reader:
+        user_prompt = row["promptText"]
+        system_prompt = row.get("system", "You are a helpful AI assistant. Keep short answers of no more than 2 sentences.")
+        break
+    result = asyncio.run(main(user_prompt, system_prompt))
+    raw_model_response = result['0'][0].decode('utf-8')
+    # Delete model instructions
+    model_instructions_marker = '[/INST]'
+    marker_len = len(model_instructions_marker)
+    return {"data": [{"prediction": raw_model_response[raw_model_response.find(model_instructions_marker)+marker_len+1:]}]}, 200
+
 
 
 def create_request(prompt, stream, request_id, sampling_parameters, model_name, send_parameters_as_tensor=True):
