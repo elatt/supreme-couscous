@@ -1,5 +1,6 @@
 import asyncio
 import csv
+import http.client
 import io
 import json
 import os
@@ -15,19 +16,20 @@ app = Flask(__name__)
 app.logger.setLevel("INFO")
 
 url_prefix = os.environ.get("URL_PREFIX", "")
-triton_server_port = os.environ.get("TRITON_PORT", "8000")
+triton_server_port = os.environ.get("TRITON_PORT", "8002")
 
 default_system_prompt = "You are a helpful AI assistant. Keep short answers of no more than 2 sentences."
 
 
 @app.route(f"{url_prefix}/")
-def health():
-    return {'message': 'OK'}
-
-
 @app.route(f"{url_prefix}/health/")
-def lrs_health():
-    return {'message': 'OK'}
+def health():
+    conn = http.client.HTTPConnection(f"localhost:{triton_server_port}")
+    conn.request("GET", "/api/v2/health/ready")
+    r1 = conn.getresponse()
+    if r1.status == 200:
+        return {'message': 'OK'}
+    return "Triton server is not ready. Please check the logs for more information.", 503
 
 
 @app.post(f"{url_prefix}/predictUnstructured/")
