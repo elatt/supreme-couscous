@@ -1,0 +1,6 @@
+flask
+tritonclient[grpc]
+openai
+awscli
+datarobot-mlops
+datarobot-drum
