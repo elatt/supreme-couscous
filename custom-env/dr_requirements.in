@@ -1,0 +1,4 @@
+flask
+tritonclient[grpc]
+datarobot-mlops
+datarobot-drum
