@@ -6,18 +6,19 @@
 #
 # Released under the terms of DataRobot Tool and Utility Agreement.
 echo "Starting Custom Model environment with NIM"
+set -e
 
 if [ "${ENABLE_CUSTOM_MODEL_RUNTIME_ENV_DUMP}" = 1 ]; then
     echo "Environment variables:"
     env
+
+    echo
+    echo "Running NVIDIA init scripts..."
+    echo
+    /opt/nvidia/nvidia_entrypoint.sh /bin/true
 fi
 
-
-echo
-echo "Running NVIDIA init scripts..."
-echo
-/opt/nvidia/nvidia_entrypoint.sh /bin/true
-
+source /home/nemo/dr/bin/activate
 echo
 echo "Starting Flask proxy in background..."
 echo
@@ -26,29 +27,21 @@ export FLASK_RUN_HOST="0.0.0.0"
 export FLASK_APP=${CODE_DIR}/hello.py
 export MODEL_DIR="${CODE_DIR}/model-store/"
 
-source /home/nemo/dr/bin/activate
 nohup flask run > log.txt 2>&1 &
 
-echo
-echo "Downloading model files..."
-echo
-export AWS_ACCESS_KEY_ID="$(echo $MLOPS_RUNTIME_PARAM_s3Credential | jq -r .payload.awsAccessKeyId)"
-export AWS_SECRET_ACCESS_KEY="$(echo $MLOPS_RUNTIME_PARAM_s3Credential | jq -r .payload.awsSecretAccessKey)"
-export AWS_SESSION_TOKEN="$(echo $MLOPS_RUNTIME_PARAM_s3Credential | jq -r .payload.awsSessionToken)"
-if [[ "$AWS_SESSION_TOKEN" == "null" ]]; then
-    unset AWS_SESSION_TOKEN
+if [[ -e $CODE_DIR/custom.py ]]; then
+    echo
+    echo "Running custom.py..."
+    echo
+    python ${CODE_DIR}/custom.py
 fi
-
-src="$(echo $MLOPS_RUNTIME_PARAM_s3Url | jq -r .payload)"
-aws s3 cp --recursive "$src" /model-store/
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-
-
 deactivate
+
 echo
 echo "Starting NeMo Inference Microservice..."
 echo
-# TODO: detect number of GPUs
-exec nemollm_inference_ms --model llm --health_port=8081 --openai_port="9999" --nemo_port="9998" --num_gpus=1
+exec nemollm_inference_ms --model llm \
+    --health_port=8081 \
+    --openai_port="9999" \
+    --nemo_port="9998" \
+    --num_gpus=$(nvidia-smi -L | wc -l)
