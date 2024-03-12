@@ -25,7 +25,7 @@ nim = OpenAI(base_url=f"http://localhost:{openapi_port}/v1", api_key="fake")
 @app.route(f"{url_prefix}/health/")
 def health():
     conn = http.client.HTTPConnection(f"localhost:{health_port}")
-    conn.request("GET", "/api/v2/health/ready")
+    conn.request("GET", "/v1/health/ready")
     r1 = conn.getresponse()
     if r1.status == 200:
         return {"message": "OK"}
