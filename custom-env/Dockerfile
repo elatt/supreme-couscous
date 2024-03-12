@@ -1,5 +1,5 @@
 # This is the default base image for use with user models and workflows.
-FROM nvcr.io/ohlfw0olaadg/ea-participants/nemollm-inference-ms:24.01 
+FROM nvcr.io/ohlfw0olaadg/ea-participants/nemollm-inference-ms:24.01
 USER root
 # Need to change the UID of nemo user until upstream fixes this as
 # it is out-of-range for our rootless buildkit image builder.
@@ -67,6 +67,7 @@ USER root
 RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
+    zstd \
   && rm -rf /var/lib/apt/lists/*
 
 USER 1000
